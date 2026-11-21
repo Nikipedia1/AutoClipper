@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>AutoClipper Dashboard</title>
+  <style>
+    :root { --bg:#0f1117; --card:#1a1d27; --border:#2a2e3a; --text:#e8eaed; --muted:#9aa0a6; --accent:#7c5cff; --accent2:#00d4aa; --danger:#ff5c5c; --success:#3dd68c; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg); color: var(--text); line-height: 1.5; min-height: 100vh; }
+    header { background: linear-gradient(135deg, #1a1d27, #12141c); border-bottom: 1px solid var(--border); padding: 1.25rem 2rem; display: flex; align-items: center; justify-content: space-between; }
+    header h1 { font-size: 1.4rem; font-weight: 700; } header h1 span { color: var(--accent); }
+    .badge { font-size: 0.75rem; padding: 0.25rem 0.6rem; border-radius: 999px; background: var(--card); border: 1px solid var(--border); color: var(--muted); }
+    .badge.ok { color: var(--success); } .badge.gpu { color: var(--accent2); }
+    main { max-width: 1200px; margin: 0 auto; padding: 2rem 1.5rem; display: grid; gap: 1.5rem; }
+    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; }
+    @media (max-width: 800px) { .grid-2 { grid-template-columns: 1fr; } }
+    .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 1.5rem; }
+    .card h2 { font-size: 1rem; font-weight: 600; margin-bottom: 1rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
+    label { display: block; font-size: 0.85rem; color: var(--muted); margin-bottom: 0.35rem; }
+    input[type="text"], input[type="number"] { width: 100%; padding: 0.65rem 0.85rem; border-radius: 8px; border: 1px solid var(--border); background: var(--bg); color: var(--text); font-size: 0.95rem; margin-bottom: 1rem; }
+    .row { display: flex; gap: 1rem; align-items: center; flex-wrap: wrap; margin-bottom: 1rem; }
+    .row label { margin: 0; display: flex; align-items: center; gap: 0.4rem; }
+    button { background: var(--accent); color: white; border: none; padding: 0.7rem 1.4rem; border-radius: 8px; font-weight: 600; cursor: pointer; }
+    .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 1rem; }
+    .stat { background: var(--bg); border-radius: 10px; padding: 1rem; text-align: center; }
+    .stat .num { font-size: 1.6rem; font-weight: 700; } .stat .lbl { font-size: 0.75rem; color: var(--muted); }
+    table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+    th, td { text-align: left; padding: 0.6rem 0.5rem; border-bottom: 1px solid var(--border); }
+    th { color: var(--muted); font-weight: 500; font-size: 0.8rem; }
+    .score { font-weight: 700; color: var(--accent2); }
+    a { color: var(--accent); text-decoration: none; }
+    .status-queued { color: #f0c040; } .status-running { color: var(--accent); } .status-success { color: var(--success); } .status-failed { color: var(--danger); }
+    .empty { color: var(--muted); font-size: 0.9rem; padding: 1rem 0; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Auto<span>Clipper</span></h1>
+    <div style="display:flex;gap:0.6rem;align-items:center;">
+      <span class="badge {% if gpu.cuda_available %}gpu{% endif %}">{{ gpu.device | upper }}{% if gpu.gpu_name %} · {{ gpu.gpu_name }}{% endif %}</span>
+      <span class="badge">{{ gpu.compute_type }}</span>
+      <span class="badge {% if smart_crop_default %}ok{% endif %}">Smart Crop {% if smart_crop_default %}ON{% else %}OFF{% endif %}</span>
+    </div>
+  </header>
+  <main>
+    <div class="card"><div class="stats">
+      <div class="stat"><div class="num">{{ history_count }}</div><div class="lbl">Video processati</div></div>
+      <div class="stat"><div class="num">{{ clips | length }}</div><div class="lbl">Clip in output</div></div>
+      <div class="stat"><div class="num">{{ jobs | length }}</div><div class="lbl">Job recenti</div></div>
+      <div class="stat"><div class="num">{{ gpu.device | upper }}</div><div class="lbl">Whisper device</div></div>
+    </div></div>
+    <div class="grid-2">
+      <div class="card">
+        <h2>Nuovo job</h2>
+        <form method="post" action="/run">
+          <label>URL YouTube</label>
+          <input type="text" name="url" placeholder="https://www.youtube.com/watch?v=..." required />
+          <div class="row">
+            <div style="flex:1"><label>Max clip</label><input type="number" name="max_clips" value="3" min="1" max="5" /></div>
+            <div style="flex:1"><label>Lingua</label><input type="text" name="language" placeholder="it / en / auto" /></div>
+          </div>
+          <div class="row">
+            <label><input type="checkbox" name="force" value="true" /> Force</label>
+            <label><input type="checkbox" name="smart_crop" value="true" {% if smart_crop_default %}checked{% endif %} /> Smart Crop</label>
+          </div>
+          <button type="submit">Avvia pipeline</button>
+        </form>
+      </div>
+      <div class="card">
+        <h2>Job recenti</h2>
+        {% if jobs %}<table><thead><tr><th>ID</th><th>Stato</th><th>URL</th></tr></thead><tbody>
+        {% for j in jobs %}<tr><td><code>{{ j.id }}</code></td><td class="status-{{ j.status }}">{{ j.status }}</td><td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{ j.url }}</td></tr>{% endfor %}
+        </tbody></table>{% else %}<p class="empty">Nessun job ancora.</p>{% endif %}
+      </div>
+    </div>
+    <div class="card">
+      <h2>Clip generate</h2>
+      {% if clips %}<table><thead><tr><th>Titolo</th><th>Score</th><th>Durata</th><th>Piattaforme</th><th>Download</th></tr></thead><tbody>
+      {% for c in clips %}<tr>
+        <td>{{ c.title or c.source_title }}</td>
+        <td class="score">{{ c.viral_score or '–' }}</td>
+        <td>{{ c.duration_sec or '–' }}s</td>
+        <td>{{ c.platforms | join(', ') }}</td>
+        <td>{% if c.mp4_name %}<a href="/download/{{ c.mp4_name }}">MP4</a>{% else %}–{% endif %}</td>
+      </tr>{% endfor %}
+      </tbody></table>{% else %}<p class="empty">Nessuna clip presente.</p>{% endif %}
+    </div>
+  </main>
+</body>
+</html>
