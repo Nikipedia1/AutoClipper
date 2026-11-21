@@ -1,0 +1,10 @@
+# AutoClipper - Python 3.10 – 3.12 recommended
+# Also requires FFmpeg in PATH (Windows: winget install Gyan.FFmpeg)
+
+yt-dlp>=2024.8.6
+faster-whisper>=1.0.3
+pydantic>=2.6,<3.0
+requests>=2.31
+opencv-python>=4.9
+mediapipe>=0.10.9
+numpy>=1.26,<2.0

@@ -1,0 +1,33 @@
+version: "3.9"
+
+services:
+  autoclipper:
+    build: .
+    container_name: autoclipper
+    volumes:
+      - ./input:/app/input
+      - ./temp:/app/temp
+      - ./output:/app/output
+      - ./processed_logs:/app/processed_logs
+    environment:
+      - LLM_PROVIDER=${LLM_PROVIDER:-ollama}
+      - LLM_API_KEY=${LLM_API_KEY:-}
+      - LLM_MODEL=${LLM_MODEL:-}
+      - OLLAMA_URL=${OLLAMA_URL:-http://host.docker.internal:11434/api/generate}
+      - WHISPER_LANGUAGE=${WHISPER_LANGUAGE:-}
+    # Example one-shot:
+    # command: ["--url", "https://www.youtube.com/watch?v=XXXX", "--max-clips", "3"]
+    profiles: ["cli"]
+
+  # Optional: local Ollama for fully offline LLM
+  ollama:
+    image: ollama/ollama:latest
+    container_name: ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    profiles: ["ollama"]
+
+volumes:
+  ollama_data:
