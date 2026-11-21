@@ -1,0 +1,101 @@
+{
+  "name": "AutoClipper → Postiz (YouTube RSS → Clip → Multi-Platform)",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 30
+            }
+          ]
+        }
+      },
+      "id": "schedule-trigger",
+      "name": "Every 30 minutes",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "url": "https://www.youtube.com/feeds/videos.xml?channel_id=UC_CHANNEL_ID_HERE",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "text"
+            }
+          }
+        }
+      },
+      "id": "http-rss",
+      "name": "Fetch YouTube RSS",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const xml = $input.first().json.data || $input.first().json.body || $input.first().json;\nconst text = typeof xml === 'string' ? xml : JSON.stringify(xml);\n\n// Estrae le entry del feed Atom YouTube\nconst entries = [];\nconst entryRegex = /<entry>([\\s\\S]*?)<\\/entry>/g;\nlet match;\nwhile ((match = entryRegex.exec(text)) !== null) {\n  const block = match[1];\n  const get = (tag) => {\n    const m = block.match(new RegExp(`<${tag}[^>]*>([\\\\s\\\\S]*?)<\\\\/${tag}>`));\n    return m ? m[1].trim() : '';\n  };\n  const getAttr = (tag, attr) => {\n    const m = block.match(new RegExp(`<${tag}[^>]*${attr}=[\"']([^\"']+)[\"']`));\n    return m ? m[1] : '';\n  };\n\n  const videoId = getAttr('yt:videoId', '') || get('yt:videoId') || getAttr('id', '').split(':').pop();\n  const title = get('title').replace(/<!\\[CDATA\\[|\\]\\]>/g, '').trim();\n  const link = getAttr('link', 'href') || `https://www.youtube.com/watch?v=${videoId}`;\n  const published = get('published') || get('updated');\n\n  if (videoId && title) {\n    entries.push({\n      videoId,\n      title,\n      link,\n      published,\n      id: videoId\n    });\n  }\n}\n\nentries.sort((a, b) => new Date(b.published) - new Date(a.published));\nreturn entries.slice(0, 3).map(e => ({ json: e }));"
+      },
+      "id": "code-parse-rss",
+      "name": "Parse RSS → Video list",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "command": "python \"C:\\percorso\\auto-clipper\\main.py\" --url \"{{ $json.link }}\" --max-clips 3 --force"
+      },
+      "id": "exec-autoclipper",
+      "name": "Run AutoClipper",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [900, 300],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const fs = require('fs');\nconst path = require('path');\n\nconst OUTPUT_DIR = 'C:\\\\percorso\\\\auto-clipper\\\\output';\nconst PUBLISHED_DIR = path.join(OUTPUT_DIR, 'published');\n\nif (!fs.existsSync(PUBLISHED_DIR)) {\n  fs.mkdirSync(PUBLISHED_DIR, { recursive: true });\n}\n\nconst files = fs.readdirSync(OUTPUT_DIR).filter(f => f.endsWith('.meta.json'));\nconst items = [];\n\nfor (const metaFile of files) {\n  const metaPath = path.join(OUTPUT_DIR, metaFile);\n  const meta = JSON.parse(fs.readFileSync(metaPath, 'utf8'));\n  const mp4Name = path.basename(meta.video_path || metaFile.replace('.meta.json', '.mp4'));\n  const mp4Path = path.join(OUTPUT_DIR, mp4Name);\n\n  if (!fs.existsSync(mp4Path)) continue;\n  if (fs.existsSync(path.join(PUBLISHED_DIR, mp4Name))) continue;\n\n  items.push({\n    json: {\n      metaPath,\n      mp4Path,\n      title: meta.title,\n      caption: meta.caption || meta.social_caption || '',\n      hashtags: (meta.hashtags || []).join(' '),\n      platforms: meta.platforms || meta.recommended_platforms || [],\n      viral_score: meta.viral_score,\n      videoId: meta.source?.video_id || '',\n      fullCaption: `${meta.caption || meta.social_caption || ''} ${(meta.hashtags || []).join(' ')}`.trim()\n    }\n  });\n}\n\nreturn items;"
+      },
+      "id": "code-read-output",
+      "name": "Read output/*.meta.json + .mp4",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1120, 300]
+    },
+    {
+      "parameters": {
+        "content": "## Configurazione obbligatoria\n\n1. Sostituisci UC_CHANNEL_ID_HERE nel nodo Fetch YouTube RSS\n2. Percorso AutoClipper nel nodo Run AutoClipper\n3. Credenziali Postiz (Header Auth + Integration IDs)\n4. Aggiungi Read Binary File prima dell'upload\n5. Variabili: POSTIZ_BASE_URL, POSTIZ_YOUTUBE_INTEGRATION_ID, POSTIZ_TIKTOK_INTEGRATION_ID, POSTIZ_INSTAGRAM_INTEGRATION_ID",
+        "height": 320,
+        "width": 400
+      },
+      "id": "sticky-notes",
+      "name": "ISTRUZIONI",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [240, 480]
+    }
+  ],
+  "connections": {
+    "Every 30 minutes": {
+      "main": [[{ "node": "Fetch YouTube RSS", "type": "main", "index": 0 }]]
+    },
+    "Fetch YouTube RSS": {
+      "main": [[{ "node": "Parse RSS → Video list", "type": "main", "index": 0 }]]
+    },
+    "Parse RSS → Video list": {
+      "main": [[{ "node": "Run AutoClipper", "type": "main", "index": 0 }]]
+    },
+    "Run AutoClipper": {
+      "main": [[{ "node": "Read output/*.meta.json + .mp4", "type": "main", "index": 0 }]]
+    }
+  },
+  "settings": { "executionOrder": "v1" },
+  "staticData": null,
+  "meta": { "templateCredsSetupCompleted": false },
+  "pinData": {},
+  "versionId": "1"
+}
